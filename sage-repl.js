@@ -11,6 +11,10 @@
  * classes, structs + impl, enums, ADT pattern matching, generators,
  * for/while loops, try/catch/raise, defer, null coalescing, arrays,
  * dicts, Python + C FFI stubs, LilyBox stubs, and Firefly-style errors.
+ *
+ *
+ * Yes, this is one monolithic JS, I built this with a bit of AI. It's an emulator, not real Sage...
+ * And to be completely fr, one JS file just easier to deploy ngl. I had like 8, shit kept breaking lol
  */
 (function (global) {
   'use strict';
