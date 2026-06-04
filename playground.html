@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sage Playground — a little desktop in the dark</title>
+<meta name="description" content="A live playground for Sage: a real REPL, the Myst package manager, and a code editor — floating over fireflies.">
+<meta name="theme-color" content="#0a0810">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Cdefs%3E%3ClinearGradient%20id='g'%20x1='0'%20y1='0'%20x2='1'%20y2='1'%3E%3Cstop%20offset='0'%20stop-color='%23e7d3ef'/%3E%3Cstop%20offset='1'%20stop-color='%23f0d2e2'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect%20x='2'%20y='4'%20width='28'%20height='24'%20rx='6'%20fill='url(%23g)'/%3E%3Ctext%20x='16'%20y='21'%20font-family='monospace'%20font-size='12'%20font-weight='700'%20text-anchor='middle'%20fill='%232a2240'%3E%26gt;_%26lt;%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Nunito:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="playground.css">
+</head>
+<body class="pg-body">
+
+<!-- the components mount themselves; we drive them from playground.js -->
+<script>window.__SAGE_NO_AUTOINIT = true;</script>
+
+<!-- Fixed atmospheric background — the same wallpaper, bloom and grain. -->
+<div class="bg-stage" aria-hidden="true">
+  <div class="bg-wallpaper"></div>
+  <div class="bg-overlay"></div>
+  <div class="bg-bloom bloom-1"></div>
+  <div class="bg-bloom bloom-2"></div>
+  <div class="bg-bloom bloom-3"></div>
+  <div class="bg-grain"></div>
+</div>
+<canvas id="firefly-canvas" aria-hidden="true"></canvas>
+
+<!-- ============ MENU BAR ============ -->
+<div class="pg-menubar" role="banner">
+  <span class="pg-brand"><span class="glyph">✦</span> Sage Playground</span>
+  <nav class="pg-menus" aria-label="Menu">
+    <span class="pg-menu is-strong">File</span>
+    <span class="pg-menu">Edit</span>
+    <span class="pg-menu">View</span>
+    <span class="pg-menu">Run</span>
+    <span class="pg-menu">Window</span>
+    <span class="pg-menu">Help</span>
+  </nav>
+  <div class="pg-tray">
+    <span class="tray-ic" title="fireflies: alive"><i data-lucide="sparkles"></i></span>
+    <span class="tray-ic" title="MossVM"><i data-lucide="cpu"></i></span>
+    <span class="pg-clock" id="pg-clock">—</span>
+  </div>
+</div>
+
+<!-- ============ WORKSPACE (windows mount here) ============ -->
+<main class="pg-workspace" id="pg-workspace" aria-label="Playground workspace">
+  <div class="pg-hint" id="pg-hint" aria-hidden="true">
+    <span class="glyph">✦</span> drag the title bars · red resets · yellow hides · green fills · click the dark to stir the fireflies
+  </div>
+</main>
+
+<!-- ============ DOCK (items built by JS) ============ -->
+<nav class="pg-dock" id="pg-dock" aria-label="Dock"></nav>
+
+<!-- ============ scripts ============ -->
+<!-- lucide icons -->
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<!-- sage-repl FIRST: it exposes window.SageEvaluator, which the editor's ▶ run uses -->
+<script src="sage-repl.js"></script>
+<script src="myst-cli.js"></script>
+<script src="sage-editor.js"></script>
+<!-- the OS shell -->
+<script src="playground.js"></script>
+</body>
+</html>
