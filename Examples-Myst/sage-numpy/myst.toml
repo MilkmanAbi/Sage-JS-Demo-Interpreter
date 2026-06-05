@@ -1,0 +1,19 @@
+[package]
+name        = "sage-numpy"
+version     = "0.1.0"
+description = "NumPy bindings for Sage via Python FFI"
+authors     = ["MilkmanAbi"]
+license     = "MIT"
+repository  = "https://github.com/MilkmanAbi/Sage-Playground"
+keywords    = ["numpy", "math", "array", "ffi", "python"]
+category    = "science"
+
+[dependencies]
+sage-io  = "1.2.0"
+
+[dev-dependencies]
+sage-test = "0.5.0"
+
+[ffi]
+python = true
+requires = ["numpy >= 1.24"]
