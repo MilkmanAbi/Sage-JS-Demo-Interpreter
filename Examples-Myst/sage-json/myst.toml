@@ -1,6 +1,0 @@
-[package]
-name = "sage-json"
-version = "1.0.0"
-description = "JSON encode/decode for Sage"
-
-[dependencies]
