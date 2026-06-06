@@ -1,0 +1,24 @@
+[package]
+name        = "sage-sandbox-demo"
+version     = "0.1.0"
+description = "LilyBox sandbox patterns for Sage — plugin isolation, resource caps, signed manifests"
+authors     = ["MilkmanAbi"]
+license     = "MIT"
+repository  = "https://github.com/MilkmanAbi/Sage-Playground"
+keywords    = ["lilybox", "sandbox", "security", "isolation", "plugin"]
+category    = "security"
+
+[dependencies]
+lilybox-core = "0.3.0"
+sage-io      = "1.2.0"
+sage-json    = "0.9.0"
+sage-crypto  = "1.1.0"
+
+[sandbox]
+# These keys declare what *this* package is allowed to do inside a LilyBox.
+# Host code that loads this package will enforce these limits.
+allow_network   = false
+allow_fs_read   = ["data/"]
+allow_fs_write  = []
+max_memory_mb   = 64
+max_cpu_ms      = 5000
