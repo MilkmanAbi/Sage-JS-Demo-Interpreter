@@ -1,0 +1,17 @@
+[package]
+name        = "sage-torch"
+version     = "0.1.0"
+description = "PyTorch tensor and autograd bindings for Sage via Python FFI"
+authors     = ["MilkmanAbi"]
+license     = "MIT"
+repository  = "https://github.com/MilkmanAbi/Sage-Playground"
+keywords    = ["pytorch", "torch", "ml", "tensor", "autograd", "ffi", "python"]
+category    = "science"
+
+[dependencies]
+sage-io   = "1.2.0"
+sage-json = "0.9.0"
+
+[ffi]
+python = true
+requires = ["torch >= 2.0"]
