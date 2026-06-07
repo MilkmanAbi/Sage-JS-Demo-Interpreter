@@ -1314,40 +1314,57 @@ for s in shapes:
       if (e.key === 'Tab') {
         e.preventDefault();
         if (e.shiftKey) {
-          // Dedent: remove up to 4 spaces from line start
-          const lineStart = val.lastIndexOf('\n', sel-1) + 1;
-          const spaces = val.slice(lineStart).match(/^ {1,4}/)?.[0] || '';
-          if (spaces) {
-            this._splice(lineStart, lineStart + spaces.length, '');
-            ta.selectionStart = ta.selectionEnd = sel - spaces.length;
+          // Dedent: remove up to 4 leading spaces from each selected line
+          const lineStart = val.lastIndexOf('\n', sel - 1) + 1;
+          if (sel !== end) {
+            const blockEnd = val.indexOf('\n', end) === -1 ? val.length
+                            : (end > lineStart && val[end-1] === '\n' ? end : val.indexOf('\n', end));
+            const region = val.slice(lineStart, end);
+            const dedented = region.replace(/^ {1,4}/gm, '');
+            const removedFirst = (region.match(/^ {1,4}/)?.[0] || '').length;
+            this._replaceRange(lineStart, end, dedented,
+              Math.max(lineStart, sel - removedFirst),
+              lineStart + dedented.length);
+          } else {
+            const spaces = val.slice(lineStart).match(/^ {1,4}/)?.[0] || '';
+            if (spaces) this._replaceRange(lineStart, lineStart + spaces.length, '', sel - spaces.length);
           }
         } else if (sel !== end) {
           // Multi-line indent
-          const lineStart = val.lastIndexOf('\n', sel-1) + 1;
-          const before    = val.slice(0, lineStart);
+          const lineStart = val.lastIndexOf('\n', sel - 1) + 1;
           const selected  = val.slice(lineStart, end);
-          const after     = val.slice(end);
           const indented  = selected.replace(/^/gm, '    ');
-          ta.value = before + indented + after;
-          ta.selectionStart = lineStart;
-          ta.selectionEnd   = lineStart + indented.length;
+          this._replaceRange(lineStart, end, indented, lineStart, lineStart + indented.length);
         } else {
+          // single caret → one indent level (predictable for beginners)
           this._insert('    ');
         }
-        this._onInput();
         return;
       }
 
       // ── Enter: smart auto-indent ───────────────────────────────────────
-      if (e.key === 'Enter') {
+      if (e.key === 'Enter' && !isCmd) {
         e.preventDefault();
-        const lineStart  = val.lastIndexOf('\n', sel-1) + 1;
-        const lineText   = val.slice(lineStart, sel);
-        const indent     = lineText.match(/^( *)/)[1];
-        const openBlock  = /:\s*(#.*)?$/.test(lineText.trimEnd());
+        const lineStart = val.lastIndexOf('\n', sel - 1) + 1;
+        const lineText  = val.slice(lineStart, sel);
+        const indent    = lineText.match(/^( *)/)[1];
+        const beforeCh  = val[sel - 1];
+        const afterCh   = val[sel];
+        const PAIR = { '(': ')', '[': ']', '{': '}' };
+
+        // Pressing Enter between an empty pair → open it up:
+        //   (|)   becomes   (\n    |\n)
+        if (sel === end && PAIR[beforeCh] && afterCh === PAIR[beforeCh]) {
+          const mid = '\n' + indent + '    ';
+          const tail = '\n' + indent;
+          this._replaceRange(sel, sel, mid + tail, sel + mid.length);
+          return;
+        }
+
+        // Indent one level after a block opener ( … : )
+        const openBlock   = /:\s*(#.*)?$/.test(lineText.trimEnd());
         const extraIndent = openBlock ? '    ' : '';
         this._insert('\n' + indent + extraIndent);
-        this._onInput();
         return;
       }
 
@@ -1377,11 +1394,8 @@ for s in shapes:
         const lineStart = val.lastIndexOf('\n', sel-1) + 1;
         const lineEnd   = val.indexOf('\n', sel);
         const line      = val.slice(lineStart, lineEnd === -1 ? val.length : lineEnd);
-        const nl        = lineEnd === -1 ? '' : '\n';
         const insertAt  = lineEnd === -1 ? val.length : lineEnd;
-        this._splice(insertAt, insertAt, nl + line);
-        ta.selectionStart = ta.selectionEnd = sel + line.length + 1;
-        this._onInput();
+        this._replaceRange(insertAt, insertAt, '\n' + line, sel + 1 + line.length);
         return;
       }
 
@@ -1396,57 +1410,74 @@ for s in shapes:
       if (e.key === ']' && isCmd) { e.preventDefault(); const ls=val.lastIndexOf('\n',sel-1)+1; this._splice(ls,ls,'    '); ta.selectionStart=ta.selectionEnd=sel+4; this._onInput(); return; }
       if (e.key === '[' && isCmd) { e.preventDefault(); const ls=val.lastIndexOf('\n',sel-1)+1; const sp=val.slice(ls).match(/^ {1,4}/)?.[0]||''; if(sp){this._splice(ls,ls+sp.length,'');ta.selectionStart=ta.selectionEnd=sel-sp.length;} this._onInput(); return; }
 
-      // ── Auto-close pairs ──────────────────────────────────────────────
+      // ── Brackets & quotes (context-aware) ─────────────────────────────
       const PAIRS = { '(':')', '[':']', '{':'}' };
       const PAIRS_CLOSE = new Set([')', ']', '}']);
       const QUOTES = ['"', "'"];
+      const nextCh = sel < val.length ? val[sel] : '';
+      const prevCh = sel > 0 ? val[sel - 1] : '';
+      const isWord = (c) => /[A-Za-z0-9_]/.test(c || '');
 
-      if (PAIRS[e.key] && sel === end) {
-        // Check it's not escaped
+      // opening bracket
+      if (PAIRS[e.key]) {
+        if (sel !== end) {
+          // wrap the selection:  foo  →  (foo)
+          e.preventDefault();
+          const inner = val.slice(sel, end);
+          this._replaceRange(sel, end, e.key + inner + PAIRS[e.key], sel + 1, end + 1);
+          return;
+        }
+        // only auto-close when the next char won't get trapped (eol / space /
+        // a closing delimiter / comma). Typing '(' right before a word just
+        // inserts '(' — no surprise pair.
+        if (nextCh === '' || /\s/.test(nextCh) || /[)\]}.,;:]/.test(nextCh)) {
+          e.preventDefault();
+          this._replaceRange(sel, sel, e.key + PAIRS[e.key], sel + 1);
+          return;
+        }
+        return; // let the single char type normally (keeps native undo)
+      }
+
+      // closing bracket: glide over an existing one instead of doubling
+      if (PAIRS_CLOSE.has(e.key) && sel === end && nextCh === e.key) {
         e.preventDefault();
-        this._insert(e.key + PAIRS[e.key]);
-        ta.selectionStart = ta.selectionEnd = sel + 1;
-        this._onInput();
+        ta.setSelectionRange(sel + 1, sel + 1);
+        this._updateStatus();
         return;
       }
-      if (PAIRS_CLOSE.has(e.key) && sel === end) {
-        // Skip over existing close bracket
-        if (val[sel] === e.key) {
+
+      // quotes
+      if (QUOTES.includes(e.key)) {
+        if (sel !== end) {                       // wrap selection
           e.preventDefault();
-          ta.selectionStart = ta.selectionEnd = sel + 1;
+          const inner = val.slice(sel, end);
+          this._replaceRange(sel, end, e.key + inner + e.key, sel + 1, end + 1);
           return;
         }
-      }
-      if (QUOTES.includes(e.key) && sel === end) {
-        const prev = val[sel-1];
-        const next = val[sel];
-        // Skip over closing quote
-        if (next === e.key) {
+        if (nextCh === e.key) {                   // glide over closing quote
           e.preventDefault();
-          ta.selectionStart = ta.selectionEnd = sel + 1;
+          ta.setSelectionRange(sel + 1, sel + 1);
+          this._updateStatus();
           return;
         }
-        // Only auto-close if not already inside a string (simple heuristic)
-        if (prev !== '\\') {
-          e.preventDefault();
-          this._insert(e.key + e.key);
-          ta.selectionStart = ta.selectionEnd = sel + 1;
-          this._onInput();
-          return;
-        }
+        // don't pair next to a word char (apostrophes, end of identifier),
+        // after a backslash, or right before a word — just type the quote
+        if (prevCh === '\\' || isWord(prevCh) || isWord(nextCh)) return;
+        e.preventDefault();
+        this._replaceRange(sel, sel, e.key + e.key, sel + 1);
+        return;
       }
 
-      // ── Backspace: remove paired bracket/quote ───────────────────────
+      // ── Backspace: delete an empty auto-pair in one stroke ────────────
+      // Only when the caret sits exactly between a matching empty pair: (|) "|"
       if (e.key === 'Backspace' && sel === end && sel > 0) {
-        const prev = val[sel-1];
-        const next = val[sel];
-        if ((PAIRS[prev] === next) || (QUOTES.includes(prev) && next === prev)) {
+        if ((PAIRS[prevCh] && PAIRS[prevCh] === nextCh) ||
+            (QUOTES.includes(prevCh) && nextCh === prevCh)) {
           e.preventDefault();
-          this._splice(sel-1, sel+1, '');
-          ta.selectionStart = ta.selectionEnd = sel-1;
-          this._onInput();
+          this._replaceRange(sel - 1, sel + 1, '', sel - 1);
           return;
         }
+        return; // normal single-char backspace (native undo preserved)
       }
 
       // ── Home key: smart home ──────────────────────────────────────────
@@ -1462,17 +1493,34 @@ for s in shapes:
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
+    // The one true edit primitive. Uses execCommand('insertText') so the
+    // browser's native undo/redo stack stays intact (Ctrl/Cmd+Z works), with a
+    // setRangeText fallback. Optionally places the caret at [selFrom, selTo].
+    _replaceRange(from, to, text, selFrom, selTo) {
+      const ta = this.textarea;
+      ta.focus();
+      ta.setSelectionRange(from, to);
+      let ok = false;
+      try { ok = document.execCommand && document.execCommand('insertText', false, text); }
+      catch (_) { ok = false; }
+      if (!ok) {
+        if (ta.setRangeText) ta.setRangeText(text, from, to, 'end');
+        else ta.value = ta.value.slice(0, from) + text + ta.value.slice(to);
+      }
+      if (selFrom != null) {
+        const s = selFrom, en = (selTo == null ? selFrom : selTo);
+        ta.setSelectionRange(s, en);
+      }
+      this._onInput();
+    }
+
     _insert(text) {
-      const ta  = this.textarea;
-      const sel = ta.selectionStart;
-      const end = ta.selectionEnd;
-      ta.value  = ta.value.slice(0, sel) + text + ta.value.slice(end);
-      ta.selectionStart = ta.selectionEnd = sel + text.length;
+      const ta = this.textarea;
+      this._replaceRange(ta.selectionStart, ta.selectionEnd, text);
     }
 
     _splice(from, to, text) {
-      const ta = this.textarea;
-      ta.value = ta.value.slice(0, from) + text + ta.value.slice(to);
+      this._replaceRange(from, to, text);
     }
 
     // ── Run (uses Sage evaluator if available) ──────────────────────────
@@ -1550,24 +1598,42 @@ for s in shapes:
       }
     }
 
-    // ── Format (basic indent normalisation) ─────────────────────────────
+    // ── Format ──────────────────────────────────────────────────────────
+    // A *safe* normaliser. Python/Sage indentation can't be re-derived from
+    // content (dedents are implicit), so instead of guessing from ':' we keep
+    // the exact block structure the author wrote and only tidy it:
+    //   · tabs → 4 spaces
+    //   · each distinct indent level snapped to a clean 4-space multiple
+    //   · trailing whitespace stripped
+    //   · runs of blank lines collapsed to one; trailing blanks trimmed
+    // This can never over- or under-indent valid code the way the old one did.
     _fmt() {
-      const lines = this.textarea.value.split('\n');
-      let depth = 0;
-      const out = lines.map(line => {
-        const stripped = line.trimStart();
-        if (!stripped) return '';
-        // Detect dedent keywords
-        if (/^(else|elif|except|finally|catch)\b/.test(stripped)) depth = Math.max(0, depth-1);
-        const indented = '    '.repeat(depth) + stripped;
-        // Increase depth after block openers
-        if (/:\s*(#.*)?$/.test(stripped.trimEnd()) && !/^#/.test(stripped)) depth++;
-        // Decrease after pass/return at same level
-        if (/^(return|raise|break|continue|pass)\b/.test(stripped)) depth = Math.max(0, depth);
-        return indented;
+      const ta = this.textarea;
+      const src = ta.value;
+      const caret = ta.selectionStart;
+      const lines = src.split('\n');
+
+      const stack = [0];                 // original indent widths, one per level
+      const out = lines.map(raw => {
+        const line = raw.replace(/\t/g, '    ').replace(/\s+$/, '');
+        const content = line.replace(/^ +/, '');
+        if (content === '') return '';   // blank lines never affect structure
+        const w = line.length - content.length;
+        while (stack.length > 1 && w < stack[stack.length - 1]) stack.pop();
+        if (w > stack[stack.length - 1]) stack.push(w);
+        const level = stack.length - 1;
+        return '    '.repeat(level) + content;
       });
-      this.textarea.value = out.join('\n');
-      this.fileContents[this.currentFile] = this.textarea.value;
+
+      let result = out.join('\n')
+        .replace(/\n{3,}/g, '\n\n')      // collapse 3+ blank lines → 1
+        .replace(/[ \t]+\n/g, '\n')      // safety: strip any trailing ws
+        .replace(/\s+$/, '\n');          // single trailing newline
+
+      if (result === src) { this._flashSaved && this._flashSaved('already tidy'); return; }
+
+      this._replaceRange(0, src.length, result, Math.min(caret, result.length));
+      this.fileContents[this.currentFile] = ta.value;
       this._render();
       this._updateStatus();
     }
